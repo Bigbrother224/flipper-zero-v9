@@ -1,0 +1,34 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+
+# Arduino/PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+platformio.ini.user
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Dependencies
+lib/
+
+# Secrets — never commit
+.env
+credentials.json
+secrets.h
