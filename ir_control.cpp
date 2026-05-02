@@ -1,8 +1,31 @@
 #include "hardware.h"
 #include "ir_control.h"
+#include <IRutils.h>
 
 IRrecv irReceiver(IR_RX_PIN, IR_RAW_BUF_SIZE);
 IRsend irSender(IR_TX_PIN);
+
+// Move TV power codes from header to avoid duplicate symbols
+const IRPresetCode tvPowerCodes[] = {
+  {"Samsung",    decode_type_t::SAMSUNG,    0xE0E040BF, 32},
+  {"Samsung",    decode_type_t::SAMSUNG,    0xE0E019E6, 32},
+  {"LG",         decode_type_t::LG,        0x20DF10EF, 32},
+  {"LG",         decode_type_t::LG,        0x20DFA35C, 32},
+  {"Sony",       decode_type_t::SONY,     0xA90,      12},
+  {"Sony",       decode_type_t::SONY,     0x490,      12},
+  {"Panasonic",  decode_type_t::PANASONIC, 0x40040100707, 48},
+  {"Toshiba",    decode_type_t::NEC,      0xF72CD827, 32},
+  {"Philips",    decode_type_t::RC5,      0x0C,       12},
+  {"Sharp",      decode_type_t::SHARP,    0x410A05FA, 32},
+};
+const int TV_CODE_COUNT = 10;
+
+// uint64 to String helper (not provided by all Arduino cores)
+static String uint64ToHexString(uint64_t val) {
+  char buf[17];
+  snprintf(buf, sizeof(buf), "%llX", (unsigned long long)val);
+  return "0x" + String(buf);
+}
 
 bool irCapturing = false;
 int irCapturedCount = 0;
@@ -87,7 +110,7 @@ String getIRCapturedJSON() {
     IRCapturedSignal &s = irSlots[i];
     json += "{\"slot\":" + String(i) +
            ",\"protocol\":\"" + typeToString(s.protocol) + "\"" +
-           ",\"code\":\"0x" + uint64ToString(s.code, 16) + "\"" +
+           ",\"code\":\"" + uint64ToHexString(s.code) + "\"" +
            ",\"bits\":" + String(s.bits) +
            ",\"valid\":" + String(s.valid ? "true" : "false") + "}";
   }
@@ -101,7 +124,7 @@ String getIRPresetsJSON() {
     if (i) json += ",";
     json += "{\"brand\":\"" + String(tvPowerCodes[i].brand) + "\"" +
            ",\"protocol\":\"" + typeToString(tvPowerCodes[i].protocol) + "\"" +
-           ",\"code\":\"0x" + uint64ToString(tvPowerCodes[i].code, 16) + "\"" +
+           ",\"code\":\"" + uint64ToHexString(tvPowerCodes[i].code) + "\"" +
            ",\"bits\":" + String(tvPowerCodes[i].bits) + "}";
   }
   json += "]";

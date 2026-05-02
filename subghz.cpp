@@ -153,9 +153,9 @@ void setSubGHzFreq(float freqMHz) {
   subghzFreq = freqMHz;
   if (!cc1101Present) return;
 
-  if (abs(freqMHz - 433.92) < 0.1) {
+  if (fabsf(freqMHz - 433.92) < 0.1) {
     cc1101Config433();
-  } else if (abs(freqMHz - 868.0) < 0.1) {
+  } else if (fabsf(freqMHz - 868.0) < 0.1) {
     cc1101Config868();
   }
 }
@@ -178,9 +178,64 @@ void stopSubGHzScan() {
   subghzScanning = false;
 }
 
+// ── GDO0 Interrupt for pulse capture ──
+
+static volatile bool gdo0Rising = false;
+static volatile unsigned long gdo0LastTime = 0;
+static volatile uint16_t gdo0PulseCount = 0;
+static volatile bool gdo0Overflow = false;
+static uint32_t gdo0Pulses[256];  // pulse widths in microseconds
+static const uint16_t GDO0_MAX_PULSES = 256;
+
+void IRAM_ATTR onGDO0Change() {
+  unsigned long now = micros();
+  bool high = digitalRead(CC1101_GDO0);
+  if (gdo0PulseCount > 0 || high) {
+    if (gdo0PulseCount < GDO0_MAX_PULSES) {
+      gdo0Pulses[gdo0PulseCount] = now - gdo0LastTime;
+      gdo0PulseCount++;
+    } else {
+      gdo0Overflow = true;
+    }
+  }
+  gdo0LastTime = now;
+}
+
 void captureSubGHz() {
-  // TODO: Read GDO0 interrupt timestamps, decode pulse widths
-  // This requires interrupt-based timing capture on CC1101_GDO0 pin
+  if (!cc1101Present || !subghzScanning) return;
+
+  // Attach interrupt and wait for signal
+  gdo0PulseCount = 0;
+  gdo0Overflow = false;
+  gdo0LastTime = micros();
+  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), onGDO0Change, CHANGE);
+
+  // Wait for capture (up to 500ms)
+  unsigned long start = millis();
+  while (gdo0PulseCount < 4 && millis() - start < 500) {
+    delay(1);
+  }
+
+  detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
+
+  if (gdo0PulseCount < 4) return;  // not enough data
+
+  // Store captured signal
+  if (subghzCapturedCount < MAX_SUBGHZ_SIGNALS) {
+    SubGHzSignal &sig = subghzSignals[subghzCapturedCount];
+    sig.frequency = subghzFreq;
+    sig.timestamp = millis();
+    sig.pulseCount = gdo0PulseCount;
+    if (gdo0PulseCount > 64) sig.pulseCount = 64;  // cap at struct size
+    for (uint16_t i = 0; i < sig.pulseCount && i < 64; i++) {
+      sig.pulseWidths[i] = gdo0Pulses[i];
+    }
+    strncpy(sig.modulation, "OOK", sizeof(sig.modulation) - 1);
+    sig.isRollingCode = false;
+    sig.valid = true;
+    lastSubghzSlot = subghzCapturedCount;
+    subghzCapturedCount++;
+  }
 }
 
 void replaySubGHz() {
@@ -191,13 +246,26 @@ void replaySubGHzSlot(int slot) {
   if (slot < 0 || slot >= subghzCapturedCount || !subghzSignals[slot].valid) return;
   if (!cc1101Present) return;
 
-  // Set frequency and enter TX
-  setSubGHzFreq(subghzSignals[slot].frequency);
-  cc1101Strobe(CC1101_STX);
+  SubGHzSignal &sig = subghzSignals[slot];
 
-  // TODO: Transmit captured pulse pattern via GDO0
-  delay(100);
+  // Set frequency and enter TX
+  setSubGHzFreq(sig.frequency);
+  cc1101Strobe(CC1101_STX);
+  delay(1);  // Let TX settle
+
+  // Transmit captured pulse pattern via GDO0
+  // Configure GDO0 as output for manual TX modulation
+  pinMode(CC1101_GDO0, OUTPUT);
+  for (uint16_t i = 0; i < sig.pulseCount; i++) {
+    digitalWrite(CC1101_GDO0, (i % 2 == 0) ? HIGH : LOW);
+    delayMicroseconds(sig.pulseWidths[i] > 0 ? sig.pulseWidths[i] : 100);
+  }
+  digitalWrite(CC1101_GDO0, LOW);
+
   cc1101Strobe(CC1101_SIDLE);
+
+  // Reconfigure GDO0 as input for RX
+  pinMode(CC1101_GDO0, INPUT);
 }
 
 String getSubGHzStatusJSON() {
@@ -231,9 +299,6 @@ String getSubGHzFrequenciesJSON() {
 void subghzLoop() {
   if (!subghzScanning || !cc1101Present) return;
 
-  // Check GDO0 for incoming data
-  if (digitalRead(CC1101_GDO0) == HIGH) {
-    // TODO: implement pulse timing capture
-    // This would use micros() to measure pulse widths on GDO0
-  }
+  // Auto-capture: when scanning and GDO0 goes high, a signal may be present
+  // Use manual capture via web API for more control
 }

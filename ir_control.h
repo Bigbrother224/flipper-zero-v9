@@ -48,17 +48,6 @@ extern int irCapturedCount;
 extern IRCapturedSignal irSlots[];
 extern int lastCapturedSlot;
 
-// Pre-defined power codes
-static const IRPresetCode tvPowerCodes[] = {
-  {"Samsung",    decode_type_t::SAMSUNG,    0xE0E040BF, 32},
-  {"Samsung",    decode_type_t::SAMSUNG,    0xE0E019E6, 32},  // Samsung power alt
-  {"LG",         decode_type_t::LG,        0x20DF10EF, 32},
-  {"LG",         decode_type_t::LG,        0x20DFA35C, 32},  // LG power alt
-  {"Sony",       decode_type_t::SONY,     0xA90,      12},
-  {"Sony",       decode_type_t::SONY,     0x490,      12},   // Sony power alt
-  {"Panasonic",  decode_type_t::PANASONIC, 0x40040100707, 48},
-  {"Toshiba",    decode_type_t::NEC,      0xF72CD827, 32},
-  {"Philips",    decode_type_t::RC5,      0x0C,       12},
-  {"Sharp",      decode_type_t::SHARP,    0x410A05FA, 32},
-};
-static const int TV_CODE_COUNT = 10;
+// TV codes defined in ir_control.cpp
+extern const IRPresetCode tvPowerCodes[];
+extern const int TV_CODE_COUNT;

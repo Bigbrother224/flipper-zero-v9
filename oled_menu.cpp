@@ -165,8 +165,8 @@ void drawMenu() {
 
   // Scroll indicator top-right
   lcd.setCursor(13, 0);
-  char scrollInd[4];
-  snprintf(scrollInd, 4, "%d/%d", menuCursor + 1, currentMenu->itemCount);
+  char scrollInd[12];
+  snprintf(scrollInd, sizeof(scrollInd), "%d/%d", menuCursor + 1, currentMenu->itemCount);
   lcd.print(scrollInd);
 }
 

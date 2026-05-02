@@ -35,6 +35,6 @@
 #define WIFI_CHECK_INTERVAL   30000
 #define MAX_CAPTURED_CREDS    20
 #define MAX_PROXY_CLIENTS     4
-#define PROXY_BUF_SIZE        1024
+#define PROXY_BUF_SIZE        4096
 #define PROXY_LOG_SIZE        30
-#define MAX_SCAN_RESULTS      15
+#define MAX_SCAN_RESULTS      30

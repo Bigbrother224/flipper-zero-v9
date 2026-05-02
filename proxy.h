@@ -24,6 +24,7 @@ extern int proxyLogCount;
 void initProxy();
 bool startProxy(uint16_t port);
 void stopProxy();
+bool setProxyTarget(const char* host, uint16_t port);
 String getProxyStatusJSON();
 String getProxyLogJSON();
 void proxyLoop();
