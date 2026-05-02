@@ -1,5 +1,5 @@
 #pragma once
-// ── Flipper Zero DIY v9 — Hardware Pin Definitions ──
+// ── Reaper v9 — Hardware Pin Definitions ──
 
 // LCD 16x2 I2C (PCF8574)
 #define LCD_SDA       21
@@ -27,14 +27,14 @@
 #define CC1101_GDO2   4
 
 // WiFi AP defaults
-#define AP_SSID       "FlipperPro_v9"
-#define AP_PASSWORD   "smarttool"
+#define AP_SSID       "Reaper"
+#define AP_PASSWORD   "r34p3r_t00l"
 
 // System
-#define WDT_TIMEOUT   30
-#define WIFI_CHECK_INTERVAL 30000
-#define MAX_CAPTURED_CREDS 20
-#define MAX_PROXY_CLIENTS   4
-#define PROXY_BUF_SIZE      1024
-#define PROXY_LOG_SIZE      30
-#define MAX_SCAN_RESULTS    15
+#define WDT_TIMEOUT           30
+#define WIFI_CHECK_INTERVAL   30000
+#define MAX_CAPTURED_CREDS    20
+#define MAX_PROXY_CLIENTS     4
+#define PROXY_BUF_SIZE        1024
+#define PROXY_LOG_SIZE        30
+#define MAX_SCAN_RESULTS      15

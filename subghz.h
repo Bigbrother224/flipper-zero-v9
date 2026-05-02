@@ -41,14 +41,15 @@
 #define CC1101_TEST0    0x2E
 #define CC1101_PKTCTRL1 0x07
 
-// CC1101 command strobes
-#define CC1101_SRES     0x30  // Reset
-#define CC1101_SXOFF    0x34  // Power down
-#define CC1101_SCAL     0x35  // Calibrate
-#define CC1101_SRX      0x34  // Enter RX
-#define CC1101_STX      0x35  // Enter TX
-#define CC1101_SIDLE    0x36  // Exit RX/TX
-#define CC1101_SNOP     0x3D  // No operation
+// CC1101 command strobes (from TI CC1101 datasheet)
+#define CC1101_SRES     0x30  // Reset chip
+#define CC1101_SFSTXON  0x31  // Enable and calibrate frequency synthesizer
+#define CC1101_SXOFF    0x32  // Turn off crystal oscillator
+#define CC1101_SCAL     0x33  // Calibrate frequency synthesizer and turn it off
+#define CC1101_SRX      0x34  // Enable RX
+#define CC1101_STX      0x35  // Enable TX (when MCSM0.FS_AUTOCAL=01, goes to IDLE first)
+#define CC1101_SIDLE    0x36  // Exit RX/TX, turn off frequency synthesizer
+#define CC1101_SNOP     0x3D  // No operation — returns status byte
 
 // CC1101 status
 #define CC1101_STATUS_TX      0x20

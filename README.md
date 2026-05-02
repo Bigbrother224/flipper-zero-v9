@@ -9,12 +9,12 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║   ███████╗██╗     ██╗██████╗ ██████╗ ███████╗██████╗          ║
-║   ██╔════╝██║     ██║██╔══██╗██╔══██╗██╔════╝██╔══██╗         ║
-║   █████╗  ██║     ██║██████╔╝██████╔╝█████╗  ██████╔╝         ║
-║   ██╔══╝  ██║     ██║██╔═══╝ ██╔═══╝ ██╔══╝  ██╔══██╗         ║
-║   ██║     ███████╗██║██║     ██║     ███████╗██║  ██║         ║
-║   ╚═╝     ╚══════╝╚═╝╚═╝     ╚═╝     ╚══════╝╚═╝  ╚═╝         ║
+║   ██████╗ ███████╗ █████╗ ██████╗ ███████╗██████╗            ║
+║   ██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔════╝██╔══██╗           ║
+║   ██████╔╝█████╗  ███████║██████╔╝█████╗  ██████╔╝           ║
+║   ██╔══██╗██╔══╝  ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗           ║
+║   ██║  ██║███████╗██║  ██║██║     ███████╗██║  ██║           ║
+║   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝           ║
 ║                                                              ║
 ║              ESP32 Security Research Multi-Tool              ║
 ║                      v9 — "The Reaper"                       ║
@@ -46,7 +46,7 @@ Built for **red teams, hardware hackers, and security researchers** who need a p
 
 ## 🎯 What This Tool Does
 
-This is an **ESP32-based offensive security multi-tool** inspired by the Flipper Zero form factor. It packs 6 attack surfaces into a single Arduino sketch with a modular C++ architecture:
+This is an **ESP32-based offensive security multi-tool** in the spirit of pocketable hacking tools. It packs 6 attack surfaces into a single Arduino sketch with a modular C++ architecture:
 
 <div align="center">
 
@@ -243,19 +243,19 @@ GND  ── GND
 ### 3. Flash & Connect
 
 ```bash
-# 1. Open FlipperZero_Style_v9.ino in Arduino IDE
+# 1. Open Reaper_v9.ino in Arduino IDE
 # 2. Board: ESP32 Dev Module
 # 3. Partition Scheme: Huge APP
 # 4. Hit Upload
 
 # After boot:
-SSID:     FlipperPro_v9
-Password: smarttool
+SSID:     Reaper
+Password: r34p3r_t00l
 
 # Open the dashboard:
 http://192.168.4.1/
 # or via mDNS:
-http://flipper.local/
+http://reaper.local/
 ```
 
 ---
@@ -398,8 +398,8 @@ curl -s http://192.168.4.1/subghz/scan?freq=868.00
 ## 🗂️ Project Structure
 
 ```
-FlipperZero_Style_v9/
-├── FlipperZero_Style_v9.ino   # Main sketch — web server, API routes, menu init
+Reaper_v9/
+├── Reaper_v9.ino              # Main sketch — web server, API routes, menu init
 ├── hardware.h                  # Pin definitions, shared constants
 │
 ├── wifi_attack.cpp/.h          # 802.11 deauth (broadcast + targeted)

@@ -31,3 +31,4 @@ void startDeauthAttack();
 void startTargetedDeauth();
 void stopAttack();
 String getAttackStatus();
+void wifiAttackLoop();  // call from loop() — non-blocking

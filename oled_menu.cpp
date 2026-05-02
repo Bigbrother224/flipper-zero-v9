@@ -8,7 +8,7 @@ const MenuScreen* previousMenu[10];
 int menuDepth = 0;
 
 static unsigned long lastInputTime = 0;
-static const int INPUT_DEBOUNCE = 250;  // ms between inputs
+static const int INPUT_DEBOUNCE = 250;
 static String statusLine1 = "";
 static String statusLine2 = "";
 static unsigned long statusTimeout = 0;
@@ -22,20 +22,14 @@ static int readJoyX() { return analogRead(JOY_VRX); }
 static int readJoyY() { return analogRead(JOY_VRY); }
 static bool readJoySW() { return digitalRead(JOY_SW) == LOW; }
 
-// Returns: 0=none, 1=up, 2=down, 3=left, 4=right, 5=click
 static int readJoystick() {
   int x = readJoyX();
   int y = readJoyY();
 
-  // Y axis: up = low value, down = high value
   if (y < JOY_THRESHOLD) return 1;       // UP
   if (y > 4095 - JOY_THRESHOLD) return 2; // DOWN
-
-  // X axis: left = low value, right = high value
   if (x < JOY_THRESHOLD) return 3;       // LEFT (BACK)
   if (x > 4095 - JOY_THRESHOLD) return 4; // RIGHT (OK)
-
-  // Push button
   if (readJoySW()) return 5;             // CLICK (OK)
 
   return 0;
@@ -46,11 +40,10 @@ void initLCD() {
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
-  lcd.print("FLIPPER v9");
+  lcd.print("REAPER v9");
   lcd.setCursor(0, 1);
-  lcd.print("Starting...");
+  lcd.print("Booting...");
 
-  // Joystick pins
   pinMode(JOY_VRX, INPUT);
   pinMode(JOY_VRY, INPUT);
   pinMode(JOY_SW, INPUT_PULLUP);
@@ -83,9 +76,17 @@ void handleButtonOK() {
 
   switch (item.type) {
     case MENU_SUBMENU:
-      if (menuDepth < 10) previousMenu[menuDepth++] = currentMenu;
-      currentMenu = (const MenuScreen*)item.data;
-      menuCursor = 0;
+      if (item.data && menuDepth < 10) {
+        previousMenu[menuDepth++] = currentMenu;
+        currentMenu = (const MenuScreen*)item.data;
+        menuCursor = 0;
+      }
+      break;
+    case MENU_ACTION:
+      if (item.data) {
+        void (*fn)() = (void (*)())item.data;
+        fn();
+      }
       break;
     case MENU_TOGGLE:
       if (item.data) *(bool*)item.data = !*(bool*)item.data;
@@ -113,18 +114,13 @@ void showStatus(const char* l1, const char* l2, int duration) {
 }
 
 void drawMenu() {
-  // Status override
-  if (statusLine1.length() > 0 && (statusTimeout == 0 || millis() < statusTimeout)) {
+  if (statusLine1.length() > 0 && millis() < statusTimeout) {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print(statusLine1.c_str());
     if (statusLine2.length() > 0) {
       lcd.setCursor(0, 1);
       lcd.print(statusLine2.c_str());
-    }
-    if (statusTimeout > 0 && millis() >= statusTimeout) {
-      statusLine1 = "";
-      statusLine2 = "";
     }
     return;
   } else {
@@ -145,6 +141,10 @@ void drawMenu() {
   if (curItem.type == MENU_TOGGLE && curItem.data) {
     curLabel += *(bool*)curItem.data ? " ON" : " OFF";
   }
+  if (curItem.type == MENU_VALUE && curItem.value) {
+    curLabel += " ";
+    curLabel += curItem.value;
+  }
   if (curLabel.length() > 15) curLabel = curLabel.substring(0, 15);
   lcd.print(curLabel);
 
@@ -159,12 +159,8 @@ void drawMenu() {
     }
     if (nextLabel.length() > 15) nextLabel = nextLabel.substring(0, 15);
     lcd.print(nextLabel);
-  } else if (menuDepth > 0) {
-    lcd.print("[BACK:");
-    String parentTitle = previousMenu[menuDepth - 1]->title;
-    if (parentTitle.length() > 9) parentTitle = parentTitle.substring(0, 9);
-    lcd.print(parentTitle);
-    lcd.print("]");
+  } else {
+    lcd.print(" [END]");
   }
 
   // Scroll indicator top-right
@@ -175,14 +171,13 @@ void drawMenu() {
 }
 
 void updateLCD() {
-  // Read joystick
   int joy = readJoystick();
   switch (joy) {
-    case 1: handleButtonUP(); break;     // Y up
-    case 2: handleButtonDown(); break;   // Y down
-    case 3: handleButtonBack(); break;   // X left = BACK
-    case 4: handleButtonOK(); break;    // X right = OK
-    case 5: handleButtonOK(); break;    // Push = OK
+    case 1: handleButtonUP(); break;
+    case 2: handleButtonDown(); break;
+    case 3: handleButtonBack(); break;
+    case 4: handleButtonOK(); break;
+    case 5: handleButtonOK(); break;
   }
 
   static unsigned long lastDraw = 0;

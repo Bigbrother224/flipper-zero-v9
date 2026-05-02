@@ -1,6 +1,6 @@
-// ── Flipper Zero DIY v9 ──
+// ── Reaper v9 ──
 // ESP32 WROOM + CC1101 Sub-GHz + IR + LCD 16x2
-// Modular architecture with hardware menu
+// Modular offensive security multi-tool
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -31,18 +31,23 @@ bool deauthEnabled = false;
 bool portalEnabled = false;
 bool proxyEnabled = false;
 
-// ── Menu definitions ──
-static void actionWiFiScan() { performScan(); showStatus("Scan done", String(scanCount) + " networks"); }
+// ── JSON helper ──
+static void sendJSON(int code, const char* json) {
+  server.send(code, "application/json", json);
+}
+
+// ── Menu action wrappers ──
+static void actionWiFiScan() { performScan(); showStatus("Scan done", String(scanCount) + " nets"); }
 static void actionDeauthStart() { startDeauthAttack(); deauthEnabled = true; showStatus("Deauth", "Running"); }
 static void actionDeauthStop() { stopAttack(); deauthEnabled = false; showStatus("Deauth", "Stopped"); }
-static void actionBLEToggle() { if (!bleSpamActive) { startBLESpam(); bleSpamEnabled = true; } else { stopBLESpam(); bleSpamEnabled = false; } showStatus("BLE Spam", bleSpamActive ? "ON" : "OFF"); }
-static void actionSubGHz433() { startSubGHzScan(433.92); showStatus("Sub-GHz", "433MHz scanning"); }
-static void actionSubGHz868() { startSubGHzScan(868.00); showStatus("Sub-GHz", "868MHz scanning"); }
+static void actionBLEToggle() { if (!bleSpamActive) { startBLESpam(); } else { stopBLESpam(); } bleSpamEnabled = bleSpamActive; showStatus("BLE", bleSpamActive ? "ON" : "OFF"); }
+static void actionSubGHz433() { startSubGHzScan(433.92); showStatus("Sub-GHz", "433MHz"); }
+static void actionSubGHz868() { startSubGHzScan(868.00); showStatus("Sub-GHz", "868MHz"); }
 static void actionSubGHzStop() { stopSubGHzScan(); showStatus("Sub-GHz", "Stopped"); }
 static void actionIRCapture() { startIRCapture(); showStatus("IR", "Capturing..."); }
 static void actionIRStop() { stopIRCapture(); showStatus("IR", "Stopped"); }
 static void actionIRReplay() { replayLastIR(); showStatus("IR", "Replaying"); }
-static void actionProxyToggle() { if (!proxyRunning) { startProxy(proxyPort); proxyEnabled = true; } else { stopProxy(); proxyEnabled = false; } showStatus("Proxy", proxyRunning ? "ON" : "OFF"); }
+static void actionProxyToggle() { if (!proxyRunning) { startProxy(proxyPort); } else { stopProxy(); } proxyEnabled = proxyRunning; showStatus("Proxy", proxyRunning ? "ON" : "OFF"); }
 
 const MenuItem wifiItems[] = {
   {"Scanner",       MENU_ACTION, (void*)actionWiFiScan},
@@ -55,7 +60,7 @@ const MenuItem wifiItems[] = {
 const MenuScreen menuWiFi = {"WiFi", wifiItems, 6};
 
 const MenuItem bleItems[] = {
-  {"Spam",     MENU_TOGGLE, &bleSpamEnabled},
+  {"Spam",     MENU_ACTION, (void*)actionBLEToggle},
   {"< Back",   MENU_BACK,   nullptr}
 };
 const MenuScreen menuBLE = {"BLE", bleItems, 2};
@@ -71,10 +76,10 @@ const MenuScreen menuSubGHz = {"Sub-GHz", subghzItems, 5};
 
 const MenuItem irItems[] = {
   {"Capture",  MENU_ACTION, (void*)actionIRCapture},
-  {"Stop",      MENU_ACTION, (void*)actionIRStop},
-  {"Replay",    MENU_ACTION, (void*)actionIRReplay},
-  {"TV Codes",  MENU_SUBMENU, nullptr},
-  {"< Back",    MENU_BACK,   nullptr}
+  {"Stop",     MENU_ACTION, (void*)actionIRStop},
+  {"Replay",   MENU_ACTION, (void*)actionIRReplay},
+  {"TV Codes", MENU_SUBMENU, nullptr},
+  {"< Back",   MENU_BACK,   nullptr}
 };
 const MenuScreen menuIR = {"IR", irItems, 5};
 
@@ -83,10 +88,11 @@ const MenuItem mainItems[] = {
   {"BLE",      MENU_SUBMENU, (void*)&menuBLE},
   {"Sub-GHz",  MENU_SUBMENU, (void*)&menuSubGHz},
   {"IR",       MENU_SUBMENU, (void*)&menuIR},
-  {"Proxy",    MENU_TOGGLE,  nullptr, "OFF"},
+  {"Proxy",    MENU_ACTION,  (void*)actionProxyToggle},
+  {"About",    MENU_VALUE,   nullptr, "Reaper v9"},
   {"< Back",   MENU_BACK,    nullptr}
 };
-const MenuScreen menuMain = {"FLIPPER v9", mainItems, 6};
+const MenuScreen menuMain = {"REAPER v9", mainItems, 7};
 
 // ── Portal actions ──
 static void actionStartPortal() {
@@ -108,29 +114,58 @@ void setupWebRoutes() {
   server.on("/attack", HTTP_GET, handleAttack);
   server.on("/stop", HTTP_GET, handleStop);
   server.on("/target", HTTP_GET, handleTarget);
-  server.on("/ble/start", HTTP_GET, [](){ startBLESpam(); bleSpamEnabled = true; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/ble/stop", HTTP_GET, [](){ stopBLESpam(); bleSpamEnabled = false; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/portal/start", HTTP_GET, [](){ int t = server.hasArg("t") ? server.arg("t").toInt() : 0; startCaptivePortal(t, ""); portalEnabled = true; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/portal/stop", HTTP_GET, [](){ stopCaptivePortal(); portalEnabled = false; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/portal/status", HTTP_GET, [](){ server.send(200, "application/json", getPortalStatusJSON()); });
-  server.on("/portal/creds", HTTP_GET, [](){ server.send(200, "application/json", getPortalCredsJSON()); });
-  server.on("/portal/templates", HTTP_GET, [](){ server.send(200, "application/json", getPortalTemplatesJSON()); });
-  server.on("/portal/clear", HTTP_GET, [](){ clearCreds(); server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/wifi/scan", HTTP_GET, [](){ server.send(200, "application/json", getWiFiScanJSON()); });
+
+  server.on("/ble/start", HTTP_GET, [](){ startBLESpam(); bleSpamEnabled = true; sendJSON(200, "{\"ok\":true}"); });
+  server.on("/ble/stop", HTTP_GET, [](){ stopBLESpam(); bleSpamEnabled = false; sendJSON(200, "{\"ok\":true}"); });
+
+  server.on("/portal/start", HTTP_GET, [](){
+    int t = server.hasArg("t") ? server.arg("t").toInt() : 0;
+    if (t < 0 || t >= NUM_PORTAL_STYLES) t = 0;
+    startCaptivePortal(t, "");
+    portalEnabled = true;
+    sendJSON(200, "{\"ok\":true}");
+  });
+  server.on("/portal/stop", HTTP_GET, [](){ stopCaptivePortal(); portalEnabled = false; sendJSON(200, "{\"ok\":true}"); });
+  server.on("/portal/status", HTTP_GET, [](){ sendJSON(200, getPortalStatusJSON()); });
+  server.on("/portal/creds", HTTP_GET, [](){ sendJSON(200, getPortalCredsJSON()); });
+  server.on("/portal/templates", HTTP_GET, [](){ sendJSON(200, getPortalTemplatesJSON()); });
+  server.on("/portal/clear", HTTP_GET, [](){ clearCreds(); sendJSON(200, "{\"ok\":true}"); });
+
+  server.on("/wifi/scan", HTTP_GET, [](){ sendJSON(200, getWiFiScanJSON()); });
   server.on("/wifi/connect", HTTP_POST, handleWiFiConnect);
-  server.on("/wifi/status", HTTP_GET, [](){ server.send(200, "application/json", getWiFiStatusJSON()); });
-  server.on("/wifi/forget", HTTP_GET, [](){ forgetWiFi(); server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/proxy/start", HTTP_GET, [](){ uint16_t p = server.hasArg("port") ? server.arg("port").toInt() : 8080; startProxy(p); proxyEnabled = true; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/proxy/stop", HTTP_GET, [](){ stopProxy(); proxyEnabled = false; server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/proxy/status", HTTP_GET, [](){ server.send(200, "application/json", getProxyStatusJSON()); });
-  server.on("/proxy/log", HTTP_GET, [](){ server.send(200, "application/json", getProxyLogJSON()); });
-  server.on("/ir/status", HTTP_GET, [](){ server.send(200, "application/json", getIRStatusJSON()); });
-  server.on("/ir/capture", HTTP_GET, [](){ startIRCapture(); server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/ir/stop", HTTP_GET, [](){ stopIRCapture(); server.send(200, "application/json", getIRCapturedJSON()); });
-  server.on("/ir/replay", HTTP_GET, [](){ replayLastIR(); server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/subghz/status", HTTP_GET, [](){ server.send(200, "application/json", getSubGHzStatusJSON()); });
-  server.on("/subghz/scan", HTTP_GET, [](){ float f = server.hasArg("freq") ? server.arg("freq").toFloat() : 433.92; startSubGHzScan(f); server.send(200, "application/json", "{\"ok\":true}"); });
-  server.on("/subghz/stop", HTTP_GET, [](){ stopSubGHzScan(); server.send(200, "application/json", "{\"ok\":true}"); });
+  server.on("/wifi/status", HTTP_GET, [](){ sendJSON(200, getWiFiStatusJSON()); });
+  server.on("/wifi/forget", HTTP_GET, [](){ forgetWiFi(); sendJSON(200, "{\"ok\":true}"); });
+
+  server.on("/proxy/start", HTTP_GET, [](){
+    uint16_t port = server.hasArg("port") ? server.arg("port").toInt() : 8080;
+    if (port < 1 || port > 65535) port = 8080;
+    startProxy(port);
+    proxyEnabled = true;
+    sendJSON(200, "{\"ok\":true}");
+  });
+  server.on("/proxy/stop", HTTP_GET, [](){ stopProxy(); proxyEnabled = false; sendJSON(200, "{\"ok\":true}"); });
+  server.on("/proxy/status", HTTP_GET, [](){ sendJSON(200, getProxyStatusJSON()); });
+  server.on("/proxy/log", HTTP_GET, [](){ sendJSON(200, getProxyLogJSON()); });
+
+  server.on("/ir/status", HTTP_GET, [](){ sendJSON(200, getIRStatusJSON()); });
+  server.on("/ir/capture", HTTP_GET, [](){ startIRCapture(); sendJSON(200, "{\"ok\":true}"); });
+  server.on("/ir/stop", HTTP_GET, [](){ stopIRCapture(); sendJSON(200, getIRCapturedJSON()); });
+  server.on("/ir/replay", HTTP_GET, [](){ replayLastIR(); sendJSON(200, "{\"ok\":true}"); });
+  server.on("/ir/bruteforce/tv", HTTP_GET, [](){
+    String brand = server.hasArg("brand") ? server.arg("brand") : "all";
+    bruteForceTV(brand.c_str());
+    sendJSON(200, "{\"ok\":true}");
+  });
+
+  server.on("/subghz/status", HTTP_GET, [](){ sendJSON(200, getSubGHzStatusJSON()); });
+  server.on("/subghz/scan", HTTP_GET, [](){
+    float freq = server.hasArg("freq") ? server.arg("freq").toFloat() : 433.92;
+    if (freq < 300.0 || freq > 928.0) freq = 433.92;
+    startSubGHzScan(freq);
+    sendJSON(200, "{\"ok\":true}");
+  });
+  server.on("/subghz/stop", HTTP_GET, [](){ stopSubGHzScan(); sendJSON(200, "{\"ok\":true}"); });
+
   server.onNotFound([](){
     if (portalActive) {
       server.send(200, "text/html", generatePortalHTML(0));
@@ -154,11 +189,13 @@ void handleStatus() {
   doc["proxy"] = proxyRunning;
   doc["heap"] = ESP.getFreeHeap() / 1024;
   doc["irCapturing"] = irCapturing;
+  doc["irCount"] = irCapturedCount;
   doc["subghzScanning"] = subghzScanning;
   doc["subghzFreq"] = subghzFreq;
-  String json;
-  serializeJson(doc, json);
-  server.send(200, "application/json", json);
+  doc["cc1101"] = cc1101Present;
+  String resp;
+  serializeJson(doc, resp);
+  server.send(200, "application/json", resp);
 }
 
 void handleScan() {
@@ -168,9 +205,18 @@ void handleScan() {
 
 void handleAttack() {
   if (server.hasArg("target")) {
-    targetBSSID = server.arg("target");
-    if (server.hasArg("ch")) targetChannel = server.arg("ch").toInt();
-    startTargetedDeauth();
+    String tgt = server.arg("target");
+    if (tgt.length() == 17) {  // basic MAC validation
+      targetBSSID = tgt;
+      if (server.hasArg("ch")) {
+        int ch = server.arg("ch").toInt();
+        if (ch >= 1 && ch <= 13) targetChannel = ch;
+      }
+      startTargetedDeauth();
+    } else {
+      sendJSON(400, "{\"error\":\"invalid mac format\"}");
+      return;
+    }
   } else {
     startDeauthAttack();
   }
@@ -184,121 +230,240 @@ void handleStop() {
 
 void handleTarget() {
   if (server.hasArg("bssid")) targetBSSID = server.arg("bssid");
-  if (server.hasArg("ch")) targetChannel = server.arg("ch").toInt();
+  if (server.hasArg("ch")) {
+    int ch = server.arg("ch").toInt();
+    if (ch >= 1 && ch <= 13) targetChannel = ch;
+  }
   if (server.hasArg("ssid")) targetSSID = server.arg("ssid");
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
 void handleWiFiConnect() {
   if (server.hasArg("ssid") && server.hasArg("pass")) {
-    saveWiFiCredentials(server.arg("ssid").c_str(), server.arg("pass").c_str());
-    WiFi.begin(server.arg("ssid").c_str(), server.arg("pass").c_str());
-    server.send(200, "application/json", "{\"ok\":true}");
-  } else {
-    server.send(400, "application/json", "{\"error\":\"missing params\"}");
+    String ssid = server.arg("ssid");
+    String pass = server.arg("pass");
+    if (ssid.length() > 0 && ssid.length() <= 32) {
+      saveWiFiCredentials(ssid.c_str(), pass.c_str());
+      WiFi.begin(ssid.c_str(), pass.c_str());
+      sendJSON(200, "{\"ok\":true}");
+      return;
+    }
   }
+  sendJSON(400, "{\"error\":\"missing or invalid params\"}");
 }
 
 // ── Dashboard HTML (embedded) ──
-const char INDEX_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>FlipperPro v9</title>
+const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reaper v9</title>
 <style>
+:root{
+  --bg:#06060e;
+  --card:#12121c;
+  --text:#e4e8f0;
+  --muted:#8892a8;
+  --accent:#0ff;
+  --violet:#818cf8;
+  --red:#f43f5e;
+  --orange:#fb923c;
+  --green:#4ade80;
+  --blue:#60a5fa;
+  --border:#1e1e32;
+  --glow:0 0 20px rgba(0,255,255,.06);
+}
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a0f;--card:#16161e;--text:#e2e8f0;--muted:#94a3b8;--accent:#00d4aa;--violet:#6366f1;--red:#ef4444;--orange:#f59e0b;--green:#22c55e;--blue:#3b82f6;--border:#2a2a3a}
-body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:16px}
-h1{font-size:1.4rem;text-align:center;margin:12px 0}
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px}
-.card h3{font-size:.9rem;margin-bottom:8px;color:var(--accent)}
-.row{display:flex;justify-content:space-between;padding:4px 0;font-size:.82rem;color:var(--muted)}
-.row span:last-child{color:var(--text);font-weight:600}
-.btn{display:block;width:100%;padding:10px;border:none;border-radius:10px;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:6px;transition:opacity .15s}
-.btn:hover{opacity:.85}
-.btn-green{background:var(--green);color:#fff}
-.btn-red{background:var(--red);color:#fff}
-.btn-blue{background:var(--blue);color:#fff}
-.btn-violet{background:var(--violet);color:#fff}
-.btn-orange{background:var(--orange);color:#fff}
-.btn-dark{background:var(--border);color:var(--text)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+body{
+  background:var(--bg);
+  background-image:
+    radial-gradient(ellipse at 20% 5%,rgba(0,255,255,.04),transparent 70%),
+    radial-gradient(ellipse at 80% 95%,rgba(129,140,248,.03),transparent 70%);
+  color:var(--text);
+  font-family:'SF Pro',system-ui,-apple-system,sans-serif;
+  max-width:500px;
+  margin:0 auto;
+  padding:16px;
+  min-height:100vh;
+}
+h1{
+  font-size:1.6rem;
+  text-align:center;
+  margin:16px 0 4px;
+  letter-spacing:2px;
+  color:var(--accent);
+  text-shadow:0 0 30px rgba(0,255,255,.3);
+}
+.sub{
+  text-align:center;
+  font-size:.75rem;
+  color:var(--muted);
+  margin-bottom:16px;
+  text-transform:uppercase;
+  letter-spacing:3px;
+}
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:10px;
+  box-shadow:var(--glow);
+}
+.card h3{
+  font-size:.85rem;
+  margin-bottom:10px;
+  color:var(--accent);
+  letter-spacing:1px;
+  text-transform:uppercase;
+  font-weight:500;
+}
+.row{
+  display:flex;
+  justify-content:space-between;
+  padding:4px 0;
+  font-size:.8rem;
+  color:var(--muted);
+  font-family:'JetBrains Mono','SF Mono',monospace;
+}
+.row span:last-child{
+  color:var(--text);
+  font-weight:500
+}
+.btn{
+  display:block;
+  width:100%;
+  padding:11px;
+  border:none;
+  border-radius:12px;
+  font-size:.85rem;
+  font-weight:600;
+  cursor:pointer;
+  margin-top:7px;
+  font-family:system-ui,sans-serif;
+  font-weight:500;
+  letter-spacing:0.5px;
+  transition:all .15s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-1px)}
+.btn-red,.btn-attack{background:var(--red);color:#fff}
+.btn-green,.btn-start{background:var(--green);color:#000}
+.btn-blue,.btn-primary{background:var(--blue);color:#000}
+.btn-violet,.btn-scan{background:var(--violet);color:#fff}
+.btn-orange,.btn-capture{background:var(--orange);color:#000}
+.btn-dark,.btn-secondary{background:var(--border);color:var(--text)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .grid .btn{margin-top:0}
-#status{font-size:.75rem;color:var(--muted);text-align:center;margin-top:12px}
-</style></head><body>
-<h1>FlipperPro v9</h1>
+.status-bar{
+  font-size:.7rem;
+  color:var(--muted);
+  text-align:center;
+  margin-top:14px;
+  font-family:'JetBrains Mono','SF Mono',monospace;
+  padding:8px;
+  border-top:1px solid var(--border);
+}
+.status-bar span{color:var(--accent)}
+</style>
+</head>
+<body>
 
-<div class=card id=attackCard>
-<h3>WiFi</h3>
-<div class=row><span>Status</span><span id=attackStatus>Idle</span></div>
-<div class=row><span>Heap</span><span id=heap>—</span></div>
-<div class=grid>
-<button class="btn btn-red" onclick="fetch('/attack')">Deauth All</button>
-<button class="btn btn-red" onclick="fetch('/stop')">Stop</button>
-</div>
-<div class=grid style=margin-top:6px>
-<button class="btn btn-orange" onclick="fetch('/ble/start')">BLE Spam</button>
-<button class="btn btn-dark" onclick="fetch('/ble/stop')">BLE Stop</button>
-</div>
-</div>
+<h1>REAPER</h1>
+<div class="sub">ESP32 Security Toolkit v9</div>
 
-<div class=card>
-<h3>Sub-GHz</h3>
-<div class=row><span>Status</span><span id=subghzStatus>Idle</span></div>
-<div class=row><span>Frequency</span><span id=subghzFreq>—</span></div>
-<div class=grid>
-<button class="btn btn-violet" onclick="fetch('/subghz/scan?freq=433.92')">433 MHz</button>
-<button class="btn btn-violet" onclick="fetch('/subghz/scan?freq=868')">868 MHz</button>
+<div class="card">
+<h3>&#9767; WiFi Attack</h3>
+<div class="row"><span>Status</span><span id="attackStatus">Idle</span></div>
+<div class="row"><span>Target</span><span id="attackTarget">—</span></div>
+<div class="row"><span>Heap</span><span id="heap">—</span></div>
+<div class="grid">
+<button class="btn btn-attack" onclick="call('/attack')">Deauth All</button>
+<button class="btn btn-attack" onclick="call('/stop')">Stop</button>
 </div>
-<button class="btn btn-dark" onclick="fetch('/subghz/stop')">Stop Scan</button>
+<div class="grid" style="margin-top:7px">
+<button class="btn btn-capture" onclick="call('/ble/start')">BLE Spam</button>
+<button class="btn btn-secondary" onclick="call('/ble/stop')">BLE Stop</button>
 </div>
-
-<div class=card>
-<h3>IR</h3>
-<div class=row><span>Status</span><span id=irStatus>Idle</span></div>
-<div class=grid>
-<button class="btn btn-orange" onclick="fetch('/ir/capture')">Capture</button>
-<button class="btn btn-dark" onclick="fetch('/ir/stop')">Stop</button>
-</div>
-<button class="btn btn-blue" onclick="fetch('/ir/replay')">Replay Last</button>
 </div>
 
-<div class=card>
-<h3>Captive Portal</h3>
-<div class=row><span>Credentials</span><span id=credCount>0</span></div>
-<div class=grid>
-<button class="btn btn-orange" onclick="fetch('/portal/start?t=0')">Start</button>
-<button class="btn btn-dark" onclick="fetch('/portal/stop')">Stop</button>
+<div class="card">
+<h3>&#10022; Sub-GHz Radio</h3>
+<div class="row"><span>Status</span><span id="subghzStatus">Idle</span></div>
+<div class="row"><span>Frequency</span><span id="subghzFreq">—</span></div>
+<div class="row"><span>Hardware</span><span id="cc1101Status">—</span></div>
+<div class="grid">
+<button class="btn btn-scan" onclick="call('/subghz/scan?freq=433.92')">433 MHz</button>
+<button class="btn btn-scan" onclick="call('/subghz/scan?freq=868')">868 MHz</button>
 </div>
-<button class="btn btn-dark" onclick="fetch('/portal/clear')">Clear Creds</button>
-</div>
-
-<div class=card>
-<h3>Proxy</h3>
-<div class=row><span>Running</span><span id=proxyStatus>No</span></div>
-<button class="btn btn-green" onclick="fetch('/proxy/start?port=8080')">Start (8080)</button>
-<button class="btn btn-dark" onclick="fetch('/proxy/stop')">Stop</button>
+<button class="btn btn-secondary" onclick="call('/subghz/stop')">Stop Scan</button>
 </div>
 
-<div id=status>Refreshing...</div>
+<div class="card">
+<h3>&#9681; IR Control</h3>
+<div class="row"><span>Status</span><span id="irStatus">Idle</span></div>
+<div class="row"><span>Captured</span><span id="irCount">0</span></div>
+<div class="grid">
+<button class="btn btn-capture" onclick="call('/ir/capture')">Capture</button>
+<button class="btn btn-secondary" onclick="call('/ir/stop')">Stop</button>
+</div>
+<button class="btn btn-primary" onclick="call('/ir/replay')">Replay Last</button>
+</div>
+
+<div class="card">
+<h3>&#9881; Captive Portal</h3>
+<div class="row"><span>Credentials</span><span id="credCount">0</span></div>
+<div class="grid">
+<button class="btn btn-capture" onclick="call('/portal/start?t=0')">Start</button>
+<button class="btn btn-secondary" onclick="call('/portal/stop')">Stop</button>
+</div>
+<button class="btn btn-secondary" onclick="call('/portal/clear')">Clear Creds</button>
+</div>
+
+<div class="card">
+<h3>&#9788; TCP Proxy</h3>
+<div class="row"><span>Running</span><span id="proxyStatus">No</span></div>
+<div class="row"><span>Port</span><span id="proxyPort">—</span></div>
+<button class="btn btn-start" onclick="call('/proxy/start?port=8080')">Start Proxy :8080</button>
+<button class="btn btn-secondary" onclick="call('/proxy/stop')">Stop Proxy</button>
+</div>
+
+<div class="status-bar">
+<span>&#9679;</span> Live · Auto-refresh 2s · <span id="uptime">0s</span> uptime
+</div>
 
 <script>
+let uptimeSec=0;
+setInterval(()=>{uptimeSec++;document.getElementById('uptime').textContent=uptimeSec+'s'},1000);
+
+function call(url){
+  fetch(url).then(r=>r.json()).then(d=>console.log(d)).catch(e=>console.error(e))
+}
+
 setInterval(async()=>{
-  try{const r=await fetch('/status');const d=await r.json();
-  document.getElementById('attackStatus').textContent=d.attack==='idle'?'Idle':d.attack==='broadcast'?'Broadcast':'Targeted';
-  document.getElementById('heap').textContent=d.heap+'KB';
-  document.getElementById('credCount').textContent=d.portalCreds;
-  document.getElementById('proxyStatus').textContent=d.proxy?'Yes':'No';
-  document.getElementById('subghzStatus').textContent=d.subghzScanning?'Scanning':'Idle';
-  document.getElementById('subghzFreq').textContent=d.subghzScanning?d.subghzFreq+'MHz':'—';
-  document.getElementById('irStatus').textContent=d.irCapturing?'Capturing':'Idle';
-  }catch(e){document.getElementById('status').textContent='Error: '+e.message}
+  try{
+    const r=await fetch('/status');
+    const d=await r.json();
+    document.getElementById('attackStatus').textContent=d.attack==='idle'?'Idle':d.attack==='broadcast'?'Broadcast':'Targeted';
+    document.getElementById('heap').textContent=d.heap+' KB';
+    document.getElementById('credCount').textContent=d.portalCreds||0;
+    document.getElementById('proxyStatus').textContent=d.proxy?'Yes':'No';
+    document.getElementById('subghzStatus').textContent=d.subghzScanning?'Scanning':'Idle';
+    document.getElementById('subghzFreq').textContent=d.subghzScanning?d.subghzFreq+' MHz':'—';
+    document.getElementById('cc1101Status').textContent=d.cc1101?'CC1101 Ready':'Not Detected';
+    document.getElementById('irStatus').textContent=d.irCapturing?'Capturing':'Idle';
+    document.getElementById('irCount').textContent=d.irCount||0;
+  }catch(e){}
 },2000);
-</script></body></html>
-)rawliteral";
+</script>
+</body></html>)rawliteral";
 
 // ── setup() ──
 void setup() {
   Serial.begin(115200);
-  Serial.println("FlipperPro v9 starting...");
+  Serial.println("\n╔══════════════════════╗");
+  Serial.println(  "║   REAPER v9 BOOT    ║");
+  Serial.println(  "╚══════════════════════╝");
 
   // WDT
   esp_task_wdt_init(WDT_TIMEOUT, true);
@@ -317,13 +482,13 @@ void setup() {
   // WiFi AP
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID, AP_PASSWORD);
-  Serial.println("AP started: " AP_SSID);
+  Serial.printf("AP: %s / %s\n", AP_SSID, AP_PASSWORD);
 
-  // Connect to saved WiFi
+  // Async connect to saved WiFi
   connectToSavedWiFi();
 
   // mDNS
-  MDNS.begin("flipper");
+  MDNS.begin("reaper");
 
   // Web server
   setupWebRoutes();
@@ -332,38 +497,22 @@ void setup() {
   // DNS for captive portal
   dnsServer.start(53, "*", WiFi.softAPIP());
 
-  showStatus("FlipperPro v9", "Ready");
-  Serial.println("Setup complete.");
+  showStatus("REAPER v9", "Ready");
+  Serial.println(">>> Reaper online <<<");
 }
 
 // ── loop() ──
 void loop() {
   esp_task_wdt_reset();
 
-  // DNS
   dnsServer.processNextRequest();
-
-  // HTTP
   server.handleClient();
 
-  // WiFi reconnect
   checkWiFiReconnect();
-
-  // BLE spam
   updateBLESpam();
-
-  // Deauth attack
   wifiAttackLoop();
-
-  // Proxy
   proxyLoop();
-
-  // IR capture
   irLoop();
-
-  // Sub-GHz scan
   subghzLoop();
-
-  // LCD menu
   updateLCD();
 }
